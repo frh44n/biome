@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+app = FastAPI()
 import asyncio
 import aiohttp
 import os
